@@ -1,11 +1,11 @@
 // src/scripts/scrape.ts
 // Usage:
 //   pnpm exec tsx src/scripts/scrape.ts https://google.com/
-//   pnpm exec tsx src/scripts/scrape.ts --site example https://example.com/
+//   pnpm exec tsx src/scripts/scrape.ts --site hn https://news.ycombinator.com/
 //   pnpm exec tsx src/scripts/scrape.ts --site generic --meta '{"blockResources":["font"]}' https://news.ycombinator.com/
 
 import "../lib/env.js";
-import { getScraper, listSites } from "../sites/registry.js";
+import { getScraper, listSites, autoloadSites } from "../sites/registry.js";
 import { closeBrowser } from "../lib/browser.js";
 
 type Argv = { site?: string; url?: string; meta?: string };
@@ -30,6 +30,9 @@ function parseArgs(argv: string[]): Argv {
 }
 
 async function main() {
+  // Ensure any *.site.ts auto-register before we look them up
+  await autoloadSites();
+
   const { site = "generic", url, meta } = parseArgs(process.argv);
   if (!url) {
     console.error(

@@ -2,7 +2,7 @@
 import "../lib/env.js";
 import { Worker, type Processor } from "bullmq";
 import { connection } from "../queue/crawl.js";
-import { getScraper, listSites } from "../sites/registry.js";
+import { getScraper, listSites, autoloadSites } from "../sites/registry.js";
 import { closeBrowser } from "../lib/browser.js";
 import { appendJsonl } from "../lib/sink.js";
 
@@ -50,7 +50,6 @@ const processor: Processor<CrawlJobData, unknown> = async (job) => {
     result,
   };
 
-  // Write to JSONL (doesn't block success if it fails)
   try {
     await appendJsonl(record);
   } catch (e) {
@@ -61,43 +60,52 @@ const processor: Processor<CrawlJobData, unknown> = async (job) => {
   return result;
 };
 
-const worker = new Worker<CrawlJobData>("crawl", processor, {
-  connection,
-  concurrency,
-});
+async function start() {
+  // ← auto-load any *.site.ts files that self-register in the registry
+  await autoloadSites();
 
-worker.on("failed", async (job, err) => {
-  const rec = {
-    ts: new Date().toISOString(),
-    event: "failed",
-    jobId: job?.id,
-    requestedSite: job?.data.site,
-    url: job?.data.url,
-    ok: false as const,
-    error: String(err?.message || err),
-  };
-  // Try to persist failure as well
-  try {
-    await appendJsonl(rec);
-  } catch {}
-  console.error(JSON.stringify(rec));
-});
+  const worker = new Worker<CrawlJobData>("crawl", processor, {
+    connection,
+    concurrency,
+  });
 
-worker.on("ready", () => {
-  console.log(
-    JSON.stringify({
-      event: "worker-ready",
-      queue: "crawl",
-      concurrency,
-      pid: process.pid,
-    }),
-  );
-});
+  worker.on("failed", async (job, err) => {
+    const rec = {
+      ts: new Date().toISOString(),
+      event: "failed",
+      jobId: job?.id,
+      requestedSite: job?.data.site,
+      url: job?.data.url,
+      ok: false as const,
+      error: String(err?.message || err),
+    };
+    try {
+      await appendJsonl(rec);
+    } catch {}
+    console.error(JSON.stringify(rec));
+  });
 
-async function shutdown() {
-  await worker.close();
-  await closeBrowser();
-  process.exit(0);
+  worker.on("ready", () => {
+    console.log(
+      JSON.stringify({
+        event: "worker-ready",
+        queue: "crawl",
+        concurrency,
+        pid: process.pid,
+      }),
+    );
+  });
+
+  async function shutdown() {
+    await worker.close();
+    await closeBrowser();
+    process.exit(0);
+  }
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+
+start().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

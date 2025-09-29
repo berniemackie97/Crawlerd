@@ -1,6 +1,7 @@
 // src/sites/generic.ts
 import { withPage } from "../lib/browser.js";
 import type { Page } from "playwright";
+import { ensureAllowedOrThrow } from "../lib/robots.js";
 
 export type GenericResult = {
   requestedUrl: string;
@@ -20,6 +21,8 @@ export async function scrapeGeneric(
 ): Promise<GenericResult> {
   return withPage(async (page) => {
     await preparePage(page, meta);
+
+    await ensureAllowedOrThrow(url); // ← check robots.txt before fetching
 
     const resp = await page.goto(url, {
       waitUntil: "domcontentloaded",

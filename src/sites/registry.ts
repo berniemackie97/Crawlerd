@@ -28,3 +28,19 @@ registerSite("example", (url, meta) => scrapeExample(url));
 // 👇 NEW: generic, works for unknown sites
 import { scrapeGeneric } from "./generic.js";
 registerSite("generic", (url, meta) => scrapeGeneric(url, meta));
+
+// --- Auto-load any site modules named *.site.ts or *.site.js in this folder ---
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
+export async function autoloadSites(): Promise<void> {
+  const herePath = __dirname; // fine under NodeNext when output is CJS
+  const files = await readdir(herePath);
+  for (const name of files) {
+    if (!/\.site\.(ts|js)$/i.test(name)) continue;
+    const full = join(herePath, name);
+    // Side-effect import: each site module should call registerSite(...) on import
+    await import(pathToFileURL(full).href);
+  }
+}
