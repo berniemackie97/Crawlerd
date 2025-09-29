@@ -24,3 +24,7 @@ export function listSites(): string[] {
 
 import { scrapeExample } from "./example.js";
 registerSite("example", (url, meta) => scrapeExample(url));
+
+// 👇 NEW: generic, works for unknown sites
+import { scrapeGeneric } from "./generic.js";
+registerSite("generic", (url, meta) => scrapeGeneric(url, meta));
